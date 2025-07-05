@@ -9,7 +9,8 @@ import time
 import base64
 from queue import Queue
 from urllib.parse import unquote, urlparse, quote
-from PIL import Image # برای کار با تصاویر از این بخش کتابخانه Pillow استفاده می‌کنیم
+import jdatetime
+from datetime import datetime, timezone, timedelta
 
 # --- تنظیمات اصلی ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -21,7 +22,11 @@ V2RAY_SOURCES = [
     "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/ss.txt"
 ]
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-MAIN_CHANNEL_USERNAME = "@YourV2rayChannel" # یوزرنیم کانال شما
+
+# !!! این بخش را با اطلاعات خود پر کنید !!!
+MAIN_CHANNEL_USERNAME = "@V2XCore"  # یوزرنیم کانال V2Ray شما
+MTPROTO_CHANNEL_URL = "https://t.me/MTXCore" # لینک کامل کانال MTProto شما
+
 
 def parse_config(config_str):
     """اطلاعات لازم را از کانفیگ استخراج می‌کند."""
@@ -68,67 +73,41 @@ def test_config_latency(config_info, result_queue, timeout=2.5):
     except requests.exceptions.RequestException:
         pass
 
-def generate_qr_with_logo(text, logo_path='logo.png'):
-    """
-    یک کد QR با لوگو در وسط آن تولید می‌کند.
-    """
-    # تنظیم سطح بالای تصحیح خطا برای اینکه لوگو باعث خرابی کد نشود
-    qr = qrcode.QRCode(
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=8, # اندازه هر باکس
-        border=2,   # حاشیه
-    )
-    qr.add_data(text)
-    qr.make(fit=True)
-    
-    # ساخت تصویر QR و تبدیل آن به فرمت RGBA برای پشتیبانی از شفافیت
-    img_qr = qr.make_image(fill_color="black", back_color="white").convert('RGBA')
-
-    try:
-        # باز کردن فایل لوگو
-        logo = Image.open(logo_path)
-    except FileNotFoundError:
-        print("logo.png not found. Generating QR without logo.")
-        # اگر لوگو نبود، همان کد QR ساده را برگردان
-        buffer = io.BytesIO()
-        img_qr.save(buffer, "PNG")
-        buffer.seek(0)
-        return buffer
-
-    # محاسبه اندازه لوگو (حدود یک پنجم اندازه کد QR)
-    qr_width, qr_height = img_qr.size
-    logo_size = qr_width // 5
-    logo = logo.resize((logo_size, logo_size))
-    
-    # محاسبه موقعیت قرارگیری لوگو در مرکز
-    pos = ((qr_width - logo_size) // 2, (qr_height - logo_size) // 2)
-    
-    # چسباندن لوگو روی کد QR
-    img_qr.paste(logo, pos)
-
-    # ذخیره تصویر نهایی در حافظه
+def generate_qr_code(text):
+    """یک تصویر کد QR سفارشی و کوچک‌تر تولید می‌کند."""
     buffer = io.BytesIO()
-    img_qr.save(buffer, "PNG")
+    qrcode.make(text, box_size=6, border=2).save(buffer, "PNG")
     buffer.seek(0)
     return buffer
 
-def send_proxy_with_qr(final_config_str, latency):
-    """پست نهایی را به تلگرام ارسال می‌کند."""
+def send_proxy_with_qr(final_config_str, latency, time_str):
+    """پست نهایی را با دکمه تبلیغاتی به تلگرام ارسال می‌کند."""
     protocol = final_config_str.split("://")[0].upper()
     display_name = unquote(final_config_str.split("#")[-1])
+
     caption = (
         f"⚡️ <b>کانفیگ جدید {protocol}</b>\n\n"
-        f"🔹 <b>نام سرور:</b> <code>{display_name}</code>\n"
-        f"🔹 <b>پینگ تست:</b> <code>{latency}ms</code>\n\n"
-        f"👇 برای کپی، روی کد زیر کلیک کنید:\n"
+        f"👇🏼 <i>برای کپی روی کانفیگ زیر کلیک کنید</i>\n"
         f"<code>{final_config_str}</code>\n\n"
-        f"📸 یا با دوربین گوشی، کد QR را اسکن کنید.\n\n"
-        f"#V2Ray #{protocol}"
+        f"--------------------------------\n"
+        f"📍 <b>سرور:</b> <code>{display_name}</code>\n"
+        f"⏱ <b>پینگ:</b> <code>{latency}ms</code>\n"
+        f"📅 <b>زمان:</b> <code>{time_str}</code>\n\n"
+        f"📸 <i>یا با دوربین گوشی، کد QR را اسکن کنید.</i>\n\n"
+        f"#{protocol} #V2Ray"
     )
-    # تولید کد QR با لوگو
-    qr_image_buffer = generate_qr_with_logo(final_config_str)
     
-    payload = {'chat_id': CHAT_ID, 'caption': caption, 'parse_mode': 'HTML'}
+    # --- بخش جدید: تعریف دکمه‌ها ---
+    keyboard = {
+        "inline_keyboard": [
+            # ردیف اول: دکمه تبلیغاتی
+            [{"text": "🚀 عضویت در کانال پروکسی MTProto", "url": MTPROTO_CHANNEL_URL}],
+        ]
+    }
+    reply_markup = json.dumps(keyboard)
+    
+    qr_image_buffer = generate_qr_code(final_config_str)
+    payload = {'chat_id': CHAT_ID, 'caption': caption, 'parse_mode': 'HTML', 'reply_markup': reply_markup}
     files = {'photo': ('v2ray_qr.png', qr_image_buffer, 'image/png')}
     
     try:
@@ -142,6 +121,10 @@ def send_proxy_with_qr(final_config_str, latency):
 
 # --- منطق اصلی برنامه (بدون تغییر) ---
 if __name__ == "__main__":
+    tehran_tz = timezone(timedelta(hours=3, minutes=30))
+    now_tehran = datetime.now(tehran_tz)
+    current_time_str = jdatetime.datetime.fromgregorian(datetime=now_tehran).strftime("%Y/%m/%d - %H:%M")
+
     print("Fetching all V2Ray configs...")
     all_configs = []
     v2ray_protocols = ("vless://", "vmess://", "trojan://", "ss://")
@@ -158,6 +141,7 @@ if __name__ == "__main__":
     else:
         test_sample = random.sample(all_configs, min(len(all_configs), 50))
         print(f"Testing a random sample of {len(test_sample)} configs...")
+        
         live_configs_queue = Queue()
         threads = []
         for config_str in test_sample:
@@ -168,12 +152,20 @@ if __name__ == "__main__":
                 thread.start()
         for thread in threads:
             thread.join()
+
         live_configs_with_latency = list(live_configs_queue.queue)
+        
         if not live_configs_with_latency:
             print("No live configs found after testing.")
         else:
             print(f"Found {len(live_configs_with_latency)} live configs.")
             live_configs_with_latency.sort(key=lambda x: x[0])
             best_latency, best_config_info = live_configs_with_latency[0]
-            final_config = create_new_config(best_config_info['base_config'], MAIN_CHANNEL_USERNAME, best_config_info['id'])
-            send_proxy_with_qr(final_config, best_latency)
+            
+            final_config = create_new_config(
+                best_config_info['base_config'], 
+                MAIN_CHANNEL_USERNAME, 
+                best_config_info['id']
+            )
+            
+            send_proxy_with_qr(final_config, best_latency, current_time_str)
