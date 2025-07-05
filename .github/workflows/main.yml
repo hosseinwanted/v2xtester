@@ -1,0 +1,32 @@
+name: Send V2Ray Config to Telegram
+
+on:
+  schedule:
+    # اجرا هر 2 ساعت یکبار (در ابتدای ساعات زوج)
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # نصب کتابخانه‌های لازم برای درخواست‌های وب و ساخت کد QR
+          pip install requests "qrcode[pil]"
+
+      - name: Run script
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python main.py
