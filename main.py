@@ -24,8 +24,9 @@ V2RAY_SOURCES = [
 ]
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
 
-# !!! یوزرنیم کانال V2Ray خود را اینجا وارد کنید !!!
-MAIN_CHANNEL_USERNAME = "@V2XCore"
+# !!! این بخش را با اطلاعات صحیح خود پر کنید !!!
+MAIN_CHANNEL_USERNAME = "@V2XCore"  # یوزرنیم کانال V2Ray
+MTPROTO_CHANNEL_URL = "https://t.me/MTXCore" # لینک کامل کانال MTProto
 
 
 def parse_config(config_str):
@@ -59,7 +60,7 @@ def create_new_config(base_config, channel_username, config_id):
     return f"{base_config}#{quote(new_name)}"
 
 def test_config_latency(config_info, result_queue, timeout=2.5):
-    """سلامت سرور را با یک درخواست وب سبک تست می‌کند."""
+    """سلامت سرور را تست می‌کند."""
     if not config_info or not config_info.get("address"): return
     address = config_info["address"]
     test_url = f"https://{address}/generate_204"
@@ -78,11 +79,7 @@ def generate_qr_with_logo(text):
     script_dir = os.path.dirname(__file__) 
     logo_path = os.path.join(script_dir, 'logo.png')
     
-    qr = qrcode.QRCode(
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=8,
-        border=2,
-    )
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=8, border=2)
     qr.add_data(text)
     qr.make(fit=True)
     img_qr = qr.make_image(fill_color="black", back_color="white").convert('RGBA')
@@ -103,11 +100,10 @@ def generate_qr_with_logo(text):
     return buffer
 
 def send_proxy_with_qr(final_config_str, latency, time_str):
-    """پست نهایی را با قالب بهینه به تلگرام ارسال می‌کند."""
+    """پست نهایی را با دکمه تبلیغاتی به تلگرام ارسال می‌کند."""
     protocol = final_config_str.split("://")[0].upper()
     display_name = unquote(final_config_str.split("#")[-1])
 
-    # ساختار نهایی متن (کپشن)
     caption = (
         f"⚡️ <b>کانفیگ جدید {protocol}</b>\n\n"
         f"👇🏼 <i>برای کپی روی کانفیگ زیر کلیک کنید</i>\n"
@@ -117,11 +113,23 @@ def send_proxy_with_qr(final_config_str, latency, time_str):
         f"⏱ <b>پینگ:</b> <code>{latency}ms</code>\n"
         f"📅 <b>زمان:</b> <code>{time_str}</code>\n\n"
         f"📸 <i>یا با دوربین گوشی، کد QR را اسکن کنید.</i>\n\n"
-        f"#{protocol} #V2Ray\n{MAIN_CHANNEL_USERNAME}" # <<<< اضافه شدن آیدی کانال به پاورقی
+        f"#{protocol} #V2Ray\n"
+        f"{MAIN_CHANNEL_USERNAME}"
     )
     
+    # --- بخش جدید: تعریف دکمه تبلیغاتی ---
+    keyboard = {
+        "inline_keyboard": [
+            [ # ردیف اول
+                {"text": "🚀 دریافت پروکسی MTProto 🌀", "url": MTPROTO_CHANNEL_URL}
+            ]
+        ]
+    }
+    reply_markup = json.dumps(keyboard)
+    # --- پایان بخش جدید ---
+
     qr_image_buffer = generate_qr_with_logo(final_config_str)
-    payload = {'chat_id': CHAT_ID, 'caption': caption, 'parse_mode': 'HTML'}
+    payload = {'chat_id': CHAT_ID, 'caption': caption, 'parse_mode': 'HTML', 'reply_markup': reply_markup}
     files = {'photo': ('v2ray_qr.png', qr_image_buffer, 'image/png')}
     
     try:
