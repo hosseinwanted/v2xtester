@@ -23,9 +23,10 @@ V2RAY_SOURCES = [
     "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/ss.txt"
 ]
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/"
+
+# !!! این بخش را با اطلاعات صحیح خود پر کنید !!!
 MAIN_CHANNEL_USERNAME = "@V2XCore"
 MTPROTO_CHANNEL_URL = "https://t.me/MTXCore"
-
 
 def parse_config(config_str):
     """اطلاعات لازم را از کانفیگ استخراج می‌کند."""
@@ -52,16 +53,12 @@ def parse_config(config_str):
     except Exception:
         return None
 
-# --- تابع اصلاح شده برای ساخت نام جدید ---
-def create_new_config(base_config, channel_username, config_id, flag):
-    """کانفیگ جدید با نام اختصاصی شامل شناسه و پرچم می‌سازد."""
-    new_name = f"🚀 {channel_username} | ID-{config_id} {flag}"
+def create_new_config(base_config, channel_username, config_id):
+    new_name = f"🚀 {channel_username} | ID-{config_id}"
     return f"{base_config}#{quote(new_name)}"
 
-# --- تابع اصلاح شده برای برگرداندن اطلاعات کامل لوکیشن ---
-def get_location_info(address):
-    """کشور و پرچم را از طریق IP یا دامنه پیدا می‌کند."""
-    default_location = {"country": "نامشخص", "flag": "❓"}
+def get_country_from_address(address):
+    """کشور را از طریق IP یا دامنه پیدا می‌کند."""
     try:
         response = requests.get(f"http://ip-api.com/json/{address}?fields=country,countryCode", timeout=5)
         if response.status_code == 200:
@@ -69,10 +66,10 @@ def get_location_info(address):
             if data.get("countryCode"):
                 cc = data['countryCode']
                 flag = "".join(chr(0x1F1E6 + ord(char.upper()) - ord('A')) for char in cc)
-                return {"country": data.get('country', ''), "flag": flag}
+                return f"{flag} {data.get('country', '')}"
     except Exception:
         pass
-    return default_location
+    return "نامشخص"
 
 def test_config_latency(config_info, result_queue, timeout=2.5):
     """سلامت سرور را تست می‌کند."""
@@ -103,19 +100,16 @@ def generate_qr_with_logo(text):
     buffer.seek(0)
     return buffer
 
-def send_proxy_with_qr(final_config_str, latency, time_str, location_info):
+def send_proxy_with_qr(final_config_str, latency, time_str, location):
     """پست کانفیگ را با تمام جزئیات نهایی ارسال می‌کند."""
     protocol = final_config_str.split("://")[0].upper()
     display_name = unquote(final_config_str.split("#")[-1])
-    # ساخت متن لوکیشن با پرچم
-    location_text = f"{location_info.get('flag', '❓')} {location_info.get('country', 'نامشخص')}"
-
     caption = (
         f"⚡️ <b>کانفیگ جدید {protocol}</b>\n\n"
         f"👇🏼 <i>برای کپی روی کانفیگ زیر کلیک کنید</i>\n"
         f"<code>{final_config_str}</code>\n\n"
         f"--------------------------------\n"
-        f"📍 <b>مکان:</b> {location_text}\n"
+        f"📍 <b>مکان:</b> {location}\n"
         f"✅ <b>متصل | </b>⏱ <b>پینگ:</b> <code>{latency}ms</code>\n"
         f"📅 <b>زمان:</b> <code>{time_str}</code>\n\n"
         f"📸 <i>یا با دوربین گوشی، کد QR را اسکن کنید.</i>\n\n"
@@ -148,13 +142,16 @@ if __name__ == "__main__":
     for url in V2RAY_SOURCES:
         try:
             response = requests.get(url, timeout=15)
+            # --- بخش اصلاح شده و کلیدی ---
+            # ابتدا کل محتوا را با Base64 دیکود کرده و سپس خط به خط بررسی می‌کنیم
             content = base64.b64decode(response.content).decode('utf-8')
+            # فقط خطوطی که با پروتکل‌های معتبر شروع می‌شوند را اضافه می‌کنیم
             all_configs.extend([line.strip() for line in content.strip().split('\n') if line.strip().startswith(v2ray_protocols)])
         except Exception as e:
             print(f"Could not process content from {url}: {e}")
     
     if not all_configs:
-        print("No valid configs found after filtering.")
+        print("No valid configs found after filtering. Exiting.")
     else:
         test_sample = random.sample(all_configs, min(len(all_configs), 50))
         print(f"Testing a random sample of {len(test_sample)} configs...")
@@ -178,14 +175,7 @@ if __name__ == "__main__":
             live_configs_with_latency.sort(key=lambda x: x[0])
             best_latency, best_config_info = live_configs_with_latency[0]
             
-            # --- بخش اصلاح شده: ارسال پرچم به تابع ساخت کانفیگ ---
-            location_info = get_location_info(best_config_info['address'])
+            final_config = create_new_config(best_config_info['base_config'], MAIN_CHANNEL_USERNAME, best_config_info['id'])
+            location = get_country_from_address(best_config_info['address'])
             
-            final_config = create_new_config(
-                best_config_info['base_config'], 
-                MAIN_CHANNEL_USERNAME, 
-                best_config_info['id'],
-                location_info.get('flag', '❓') # ارسال پرچم
-            )
-            
-            send_proxy_with_qr(final_config, best_latency, current_time_str, location_info)
+            send_proxy_with_qr(final_config, best_latency, current_time_str, location)
