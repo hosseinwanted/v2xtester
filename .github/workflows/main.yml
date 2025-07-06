@@ -4,6 +4,8 @@ on:
   schedule:
     # اجرا هر 2 ساعت یکبار
     - cron: '0 * * * *'
+  
+  # اجرای دستی بدون منوی انتخاب
   workflow_dispatch:
 
 jobs:
@@ -22,7 +24,6 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # اضافه کردن jdatetime به لیست نیازمندی‌ها
           pip install requests "qrcode[pil]" jdatetime
 
       - name: Run script
